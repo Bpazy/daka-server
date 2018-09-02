@@ -22,19 +22,27 @@ type Date struct {
 }
 
 func (d *Date) Scan(src interface{}) error {
-	panic("implement me")
+	dateStr := string(src.([]uint8))
+	t, err := time.Parse("2006-01-02", dateStr)
+	if err != nil {
+		return err
+	}
+	d.Year = t.Year()
+	d.Month = int(t.Month())
+	d.Day = t.Day()
+	return nil
+}
+
+func (d Date) Value() (driver.Value, error) {
+	parse, err := time.Parse("2006-01-02", d.String())
+	if err != nil {
+		return nil, err
+	}
+	return parse, nil
 }
 
 func (d *Date) String() string {
 	return fmt.Sprintf("%d-%02d-%02d", d.Year, d.Month, d.Day)
-}
-
-func (d Date) Value() (driver.Value, error) {
-	parse, e := time.Parse("2006-01-02", d.String())
-	if e != nil {
-		panic(e)
-	}
-	return parse, nil
 }
 
 func (d Date) MarshalJSON() ([]byte, error) {
@@ -60,6 +68,7 @@ func parseInt(i string) int {
 }
 
 type Data struct {
+	InfoId   string `json:"info_id"`
 	Name     string `json:"name"`
 	Distance int    `json:"distance"`
 	Date     Date   `json:"date"`
@@ -112,7 +121,13 @@ func init() {
 
 func main() {
 	r := gin.Default()
-	r.POST("/save", func(c *gin.Context) {
+	r.POST("/save", saveHandler())
+	r.GET("/list", listHandler())
+	r.Run() // listen and serve on 0.0.0.0:8080
+}
+
+func saveHandler() func(*gin.Context) {
+	return func(c *gin.Context) {
 		var data = Data{}
 		if err := c.BindJSON(&data); err != nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -121,10 +136,12 @@ func main() {
 			})
 			return
 		}
-		stmt, err := db.Prepare("INSERT INTO info(INFO_ID, USERNAME, DISTANCE, DATE) values(?,?,?,?)")
+		stmt, err := db.Prepare("INSERT INTO info(INFO_ID, NAME, DISTANCE, DATE) values(?,?,?,?)")
 		if err != nil {
 			panic(err)
 		}
+		defer stmt.Close()
+
 		_, err = stmt.Exec(uuid.Must(uuid.NewV4()), data.Name, data.Distance, &data.Date)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
@@ -134,6 +151,27 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, data)
-	})
-	r.Run() // listen and serve on 0.0.0.0:8080
+	}
+}
+
+func listHandler() func(*gin.Context) {
+	return func(c *gin.Context) {
+		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info")
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"msg":  "Query failed.",
+				"data": err.Error(),
+			})
+			return
+		}
+		defer rows.Close()
+
+		var dataList []Data
+		for rows.Next() {
+			var data = Data{}
+			rows.Scan(&data.InfoId, &data.Name, &data.Distance, &data.Date)
+			dataList = append(dataList, data)
+		}
+		c.JSON(http.StatusOK, dataList)
+	}
 }

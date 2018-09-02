@@ -19,6 +19,12 @@
   version = "v1.3.0"
 
 [[projects]]
+  name = "github.com/go-sql-driver/mysql"
+  packages = ["."]
+  revision = "d523deb1b23d913de5bdada721a6071e71283618"
+  version = "v1.4.0"
+
+[[projects]]
   name = "github.com/gofrs/uuid"
   packages = ["."]
   revision = "370558f003bfe29580cd0f698d8640daccdcc45c"
@@ -41,12 +47,6 @@
   revision = "57fdcb988a5c543893cc61bce354a6e24ab70022"
 
 [[projects]]
-  name = "github.com/mattn/go-sqlite3"
-  packages = ["."]
-  revision = "25ecb14adfc7543176f7d85291ec7dba82c6f7e4"
-  version = "v1.9.0"
-
-[[projects]]
   name = "github.com/ugorji/go"
   packages = ["codec"]
   revision = "c88ee250d0221a57af388746f5cf03768c21d6e2"
@@ -56,6 +56,12 @@
   name = "golang.org/x/sys"
   packages = ["unix"]
   revision = "fa5fdf94c78965f1aa8423f0cc50b8b8d728b05a"
+
+[[projects]]
+  name = "google.golang.org/appengine"
+  packages = ["cloudsql"]
+  revision = "b1f26356af11148e710935ed1ac8a7f5702c7612"
+  version = "v1.1.0"
 
 [[projects]]
   name = "gopkg.in/go-playground/validator.v8"
@@ -71,6 +77,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "dc68ab6111e546f14884b01d2e906d5fefca6f6b9de16ed6358c8ddc6538349d"
+  inputs-digest = "663cad783d5fb3852f2f3ece7ef329f4988884348b7a21fc6c2f677f2f7e913b"
   solver-name = "gps-cdcl"
   solver-version = 1
