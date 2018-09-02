@@ -3,13 +3,13 @@ package main
 import (
 	"database/sql"
 	"database/sql/driver"
+	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
-	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -34,12 +34,11 @@ func (d Date) Value() (driver.Value, error) {
 	if e != nil {
 		panic(e)
 	}
-	parse = parse.Truncate(time.Hour)
 	return parse, nil
 }
 
 func (d Date) MarshalJSON() ([]byte, error) {
-	result := fmt.Sprintf("%d-%02d-%02d", d.Year, d.Month, d.Day)
+	result := fmt.Sprintf("\"%d-%02d-%02d\"", d.Year, d.Month, d.Day)
 	return []byte(result), nil
 }
 
@@ -69,14 +68,19 @@ type Data struct {
 var db *sql.DB
 
 func init() {
-	fmt.Println(os.Args[0])
-	db2, err := sql.Open("sqlite3", "./db2.db")
+	sqlUserName := flag.String("sqlUserName", "", "mysql user name")
+	sqlPassword := flag.String("sqlPassword", "", "mysql user password")
+	sqlUrl := flag.String("sqlUrl", "", "mysql url")
+	sqlDatabase := flag.String("sqlDatabase", "", "database")
+	flag.Parse()
+
+	db2, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", *sqlUserName, *sqlPassword, *sqlUrl, *sqlDatabase))
 	if err != nil {
 		log.Fatal(err)
 	}
 	db = db2
 
-	rows, err := db2.Query("select COUNT(*) from sqlite_master where name = 'info';")
+	rows, err := db2.Query("SELECT count(*) FROM information_schema.TABLES WHERE table_name = 'info';")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -117,7 +121,6 @@ func main() {
 			})
 			return
 		}
-		// TODO github.com/mattn/go-sqlite3 not support (sqlite3 date type)
 		stmt, err := db.Prepare("INSERT INTO info(INFO_ID, USERNAME, DISTANCE, DATE) values(?,?,?,?)")
 		if err != nil {
 			panic(err)
