@@ -3,11 +3,13 @@ package main
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
+	"github.com/iris-contrib/errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -91,7 +93,7 @@ func init() {
 	}
 	db = db2
 
-	rows, err := db2.Query("SELECT count(*) FROM information_schema.TABLES WHERE table_name = 'info';")
+	rows, err := db2.Query("SELECT count(*) FROM information_schema.TABLES WHERE table_name = 'daka_info';")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -123,13 +125,83 @@ func init() {
 
 func main() {
 	r := gin.Default()
+	r.Use(UserMiddleware())
 
 	api := r.Group("/api")
 	{
 		api.POST("/save", saveHandler())
 		api.POST("/list", listHandler())
+		api.POST("/login", LoginHandler())
 	}
 	r.Run(*port) // listen and serve on 0.0.0.0:8080
+}
+
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func LoginHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		lr := LoginRequest{}
+		err := c.BindJSON(&lr)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"msg":  "Json deserialize failed",
+				"data": err.Error(),
+			})
+			return
+		}
+	}
+}
+
+type dakaUser struct {
+	UserId   string `json:"user_id"`
+	UserName string `json:"user_name"`
+	Password string `json:"password"`
+}
+
+func (d dakaUser) toCookie() string {
+	cBytes, err := json.Marshal(d)
+	if err != nil {
+		panic(err)
+	}
+	return string(cBytes)
+}
+
+func toDakaUser(cookie string) (d *dakaUser) {
+	err := json.Unmarshal([]byte(cookie), d)
+	if err != nil {
+		panic(err)
+	}
+	return
+}
+
+type dakaCookie struct {
+	Cookie string
+}
+
+func (d dakaCookie) valid() bool {
+	return true
+}
+
+func UserMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.RequestURI == "/login" {
+			return
+		}
+		cookie, err := c.Cookie("daka")
+		if err != nil && err == http.ErrNoCookie {
+			c.AbortWithError(419, errors.New("Login needed"))
+			return
+		}
+
+		dCookie := dakaCookie{cookie}
+		if !dCookie.valid() {
+			c.AbortWithError(419, errors.New("Login needed"))
+			return
+		}
+	}
 }
 
 func saveHandler() gin.HandlerFunc {
@@ -178,7 +250,7 @@ func listHandler() gin.HandlerFunc {
 			c.JSON(http.StatusOK, "Json deserialize failed.")
 			return
 		}
-		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info ORDER BY CREATE_TIME LIMIT ? , ?", pagination.Start, pagination.Size)
+		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info ORDER BY CREATE_TIME DESC LIMIT ? , ?", pagination.Start, pagination.Size)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"msg":  "Query failed.",
