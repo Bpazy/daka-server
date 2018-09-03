@@ -3,13 +3,11 @@ package main
 import (
 	"database/sql"
 	"database/sql/driver"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
-	"github.com/iris-contrib/errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -78,6 +76,10 @@ type Data struct {
 
 var db *sql.DB
 var port *string
+
+const (
+	cookieUserId = "cookieUserId"
+)
 
 func init() {
 	sqlUserName := flag.String("sqlUserName", "", "mysql user name")
@@ -152,6 +154,16 @@ func LoginHandler() gin.HandlerFunc {
 			})
 			return
 		}
+
+		user, err := findDakaUserByUserName(lr.Username)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"msg":  "user name or password is incorrect",
+				"data": err.Error(),
+			})
+			return
+		}
+		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", ".", true, true)
 	}
 }
 
@@ -161,44 +173,40 @@ type dakaUser struct {
 	Password string `json:"password"`
 }
 
-func (d dakaUser) toCookie() string {
-	cBytes, err := json.Marshal(d)
-	if err != nil {
-		panic(err)
-	}
-	return string(cBytes)
+func findDakaUser(userId string) (d *dakaUser, err error) {
+	row := db.QueryRow("SELECT USER_ID, USERNAME FROM daka_user where user_id = ?", userId)
+	err = row.Scan(d)
+	return
 }
 
-func toDakaUser(cookie string) (d *dakaUser) {
-	err := json.Unmarshal([]byte(cookie), d)
-	if err != nil {
-		panic(err)
-	}
+func findDakaUserByUserName(username string) (d *dakaUser, err error) {
+	row := db.QueryRow("SELECT USER_ID, USERNAME FROM daka_user where USERNAME = ?", username)
+	err = row.Scan(d)
 	return
 }
 
 type dakaCookie struct {
-	Cookie string
+	Cookie string `json:"cookie"`
 }
 
-func (d dakaCookie) valid() bool {
-	return true
+func (d dakaCookie) getUserId() (userId string) {
+	return d.Cookie
 }
 
 func UserMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.RequestURI == "/login" {
+		if c.Request.RequestURI == "/api/login" {
 			return
 		}
-		cookie, err := c.Cookie("daka")
+		c2, err := c.Cookie(cookieUserId)
 		if err != nil && err == http.ErrNoCookie {
-			c.AbortWithError(419, errors.New("Login needed"))
+			c.JSON(419, "login needed")
 			return
 		}
-
-		dCookie := dakaCookie{cookie}
-		if !dCookie.valid() {
-			c.AbortWithError(419, errors.New("Login needed"))
+		cookie := dakaCookie{c2}
+		_, err = findDakaUser(cookie.getUserId())
+		if err != nil {
+			c.JSON(419, "login needed")
 			return
 		}
 	}
@@ -214,7 +222,7 @@ func saveHandler() gin.HandlerFunc {
 			})
 			return
 		}
-		stmt, err := db.Prepare("INSERT INTO info(INFO_ID, NAME, DISTANCE, DATE) values(?,?,?,?)")
+		stmt, err := db.Prepare("INSERT INTO daka_info(INFO_ID, NAME, DISTANCE, DATE) values(?,?,?,?)")
 		if err != nil {
 			panic(err)
 		}
