@@ -75,12 +75,14 @@ type Data struct {
 }
 
 var db *sql.DB
+var port *string
 
 func init() {
 	sqlUserName := flag.String("sqlUserName", "", "mysql user name")
 	sqlPassword := flag.String("sqlPassword", "", "mysql user password")
 	sqlUrl := flag.String("sqlUrl", "", "mysql url")
 	sqlDatabase := flag.String("sqlDatabase", "", "database")
+	port = flag.String("port", ":8080", "serve port")
 	flag.Parse()
 
 	db2, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", *sqlUserName, *sqlPassword, *sqlUrl, *sqlDatabase))
@@ -125,7 +127,7 @@ func main() {
 	r.POST("/save", saveHandler())
 	r.GET("/list", listHandler())
 
-	r.Run() // listen and serve on 0.0.0.0:8080
+	r.Run(*port) // listen and serve on 0.0.0.0:8080
 }
 
 func saveHandler() gin.HandlerFunc {
