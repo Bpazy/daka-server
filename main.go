@@ -124,9 +124,11 @@ func init() {
 func main() {
 	r := gin.Default()
 
-	r.POST("/save", saveHandler())
-	r.GET("/list", listHandler())
-
+	api := r.Group("/api")
+	{
+		api.POST("/save", saveHandler())
+		api.GET("/list", listHandler())
+	}
 	r.Run(*port) // listen and serve on 0.0.0.0:8080
 }
 
