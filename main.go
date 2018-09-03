@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	"log"
 	"net/http"
+	"strings"
 )
 
 var db *sql.DB
@@ -28,13 +29,13 @@ func init() {
 
 	db2, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", *sqlUserName, *sqlPassword, *sqlUrl, *sqlDatabase))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("connect database error", err)
 	}
 	db = db2
 
 	rows, err := db2.Query("SELECT count(*) FROM information_schema.TABLES WHERE table_name = 'daka_info';")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("query table exists error", err)
 	}
 	defer rows.Close()
 
@@ -49,16 +50,23 @@ func init() {
 	log.Println("init mysql and create table...")
 	initSqlBytes, err := Asset("res/init.sql")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("load init.sql error", err)
 	}
-	initSql := string(initSqlBytes)
-	stmt, err := db.Prepare(initSql)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = stmt.Exec()
-	if err != nil {
-		log.Fatal(err)
+	initSqls := strings.Split(strings.TrimSpace(string(initSqlBytes)), ";")
+	for _, initSql := range initSqls {
+		initSql := strings.TrimSpace(initSql)
+		if len(initSql) == 0 {
+			continue
+		}
+		stmt, err := db.Prepare(initSql)
+		if err != nil {
+			log.Fatal("prepare init sql error", err)
+		}
+		_, err = stmt.Exec()
+		if err != nil {
+			log.Fatal("exec init sql error", err)
+		}
+		stmt.Close()
 	}
 }
 
@@ -75,12 +83,11 @@ func main() {
 	r.Run(*port)
 }
 
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 func LoginHandler() gin.HandlerFunc {
+	type LoginRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
 	return func(c *gin.Context) {
 		lr := LoginRequest{}
 		err := c.BindJSON(&lr)
