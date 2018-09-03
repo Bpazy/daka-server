@@ -103,7 +103,7 @@ func init() {
 		return
 	}
 
-	log.Println("init sqlite and create table...")
+	log.Println("init mysql and create table...")
 	initSqlBytes, err := Asset("res/init.sql")
 	if err != nil {
 		log.Fatal(err)
@@ -121,12 +121,14 @@ func init() {
 
 func main() {
 	r := gin.Default()
+
 	r.POST("/save", saveHandler())
 	r.GET("/list", listHandler())
+
 	r.Run() // listen and serve on 0.0.0.0:8080
 }
 
-func saveHandler() func(*gin.Context) {
+func saveHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var data = Data{}
 		if err := c.BindJSON(&data); err != nil {
@@ -154,7 +156,7 @@ func saveHandler() func(*gin.Context) {
 	}
 }
 
-func listHandler() func(*gin.Context) {
+func listHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info")
 		if err != nil {
@@ -166,7 +168,7 @@ func listHandler() func(*gin.Context) {
 		}
 		defer rows.Close()
 
-		var dataList []Data
+		dataList := make([]Data, 0)
 		for rows.Next() {
 			var data = Data{}
 			rows.Scan(&data.InfoId, &data.Name, &data.Distance, &data.Date)
