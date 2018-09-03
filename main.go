@@ -127,7 +127,7 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.POST("/save", saveHandler())
-		api.GET("/list", listHandler())
+		api.POST("/list", listHandler())
 	}
 	r.Run(*port) // listen and serve on 0.0.0.0:8080
 }
@@ -160,9 +160,25 @@ func saveHandler() gin.HandlerFunc {
 	}
 }
 
+type PaginationRequest struct {
+	Start int `json:"start"`
+	Size  int `json:"size"`
+}
+
+type PaginationResponse struct {
+	Total int         `json:"total"`
+	Data  interface{} `json:"data"`
+}
+
 func listHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info")
+		pagination := PaginationRequest{}
+		err := c.BindJSON(&pagination)
+		if err != nil {
+			c.JSON(http.StatusOK, "Json deserialize failed.")
+			return
+		}
+		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info ORDER BY CREATE_TIME LIMIT ? , ?", pagination.Start, pagination.Size)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"msg":  "Query failed.",
@@ -171,6 +187,9 @@ func listHandler() gin.HandlerFunc {
 			return
 		}
 		defer rows.Close()
+		row := db.QueryRow("SELECT COUNT(*) FROM info;")
+		total := 0
+		row.Scan(&total)
 
 		dataList := make([]Data, 0)
 		for rows.Next() {
@@ -178,6 +197,6 @@ func listHandler() gin.HandlerFunc {
 			rows.Scan(&data.InfoId, &data.Name, &data.Distance, &data.Date)
 			dataList = append(dataList, data)
 		}
-		c.JSON(http.StatusOK, dataList)
+		c.JSON(http.StatusOK, PaginationResponse{Total: total, Data: dataList})
 	}
 }
