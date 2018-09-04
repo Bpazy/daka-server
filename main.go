@@ -17,6 +17,8 @@ var port *string
 
 const (
 	cookieUserId = "cookieUserId"
+	OK           = "OK"
+	FAILED       = "FAILED"
 )
 
 func init() {
@@ -78,12 +80,56 @@ func main() {
 	{
 		api.POST("/save", saveHandler())
 		api.POST("/list", listHandler())
-		api.POST("/login", LoginHandler())
+		api.POST("/login", loginHandler())
+		api.POST("/register", registerHandler())
 	}
 	r.Run(*port)
 }
 
-func LoginHandler() gin.HandlerFunc {
+type result struct {
+	Code string      `json:"code"`
+	Msg  string      `json:"msg"`
+	Data interface{} `json:"data"`
+}
+
+func ok(msg string, data interface{}) (httpStatus int, r result) {
+	httpStatus = http.StatusOK
+	r.Msg = msg
+	r.Data = data
+	r.Code = OK
+	return
+}
+
+func fail(msg string, data interface{}) (httpStatus int, r result) {
+	httpStatus = http.StatusOK
+	r.Msg = msg
+	r.Data = data
+	r.Code = FAILED
+	return
+}
+
+func registerHandler() gin.HandlerFunc {
+	type RegisterRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	return func(c *gin.Context) {
+		rr := RegisterRequest{}
+		err := c.BindJSON(&rr)
+		if err != nil {
+			c.JSON(fail("Json deserialize failed", err.Error()))
+			return
+		}
+		err = register(rr.Username, rr.Password)
+		if err != nil {
+			c.JSON(fail(err.Error(), ""))
+			return
+		}
+		c.JSON(ok("register success", ""))
+	}
+}
+
+func loginHandler() gin.HandlerFunc {
 	type LoginRequest struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -92,29 +138,21 @@ func LoginHandler() gin.HandlerFunc {
 		lr := LoginRequest{}
 		err := c.BindJSON(&lr)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "Json deserialize failed",
-				"data": err.Error(),
-			})
+			c.JSON(fail("Json deserialize failed", err.Error()))
 			return
 		}
 
 		user, err := findDakaUserByUserName(lr.Username)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "user name or password is incorrect",
-				"data": err.Error(),
-			})
+			c.JSON(fail("user name or password is incorrect", err.Error()))
 			return
 		}
 		if !matchPassword(lr.Username, lr.Password) {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "user name or password is incorrect",
-				"data": err.Error(),
-			})
+			c.JSON(fail("user name or password is incorrect", err.Error()))
 			return
 		}
-		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", ".", true, true)
+		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", "", true, true)
+		c.JSON(ok("login success", ""))
 	}
 }
 
@@ -129,10 +167,7 @@ func saveHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var data = Data{}
 		if err := c.BindJSON(&data); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "Json deserialize failed.",
-				"data": err.Error(),
-			})
+			c.JSON(fail("Json deserialize failed.", err.Error()))
 			return
 		}
 		stmt, err := db.Prepare("INSERT INTO daka_info(INFO_ID, NAME, DISTANCE, DATE) values(?,?,?,?)")
@@ -143,10 +178,7 @@ func saveHandler() gin.HandlerFunc {
 
 		_, err = stmt.Exec(uuid.Must(uuid.NewV4()), data.Name, data.Distance, &data.Date)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "Insert data failed.",
-				"data": err.Error(),
-			})
+			c.JSON(fail("Insert data failed.", err.Error()))
 			return
 		}
 		c.JSON(http.StatusOK, data)
@@ -168,19 +200,16 @@ func listHandler() gin.HandlerFunc {
 		pagination := PaginationRequest{}
 		err := c.BindJSON(&pagination)
 		if err != nil {
-			c.JSON(http.StatusOK, "Json deserialize failed.")
+			c.JSON(fail("Json deserialize failed.", ""))
 			return
 		}
-		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM info ORDER BY CREATE_TIME DESC LIMIT ? , ?", pagination.Start, pagination.Size)
+		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM daka_info ORDER BY CREATE_TIME DESC LIMIT ? , ?", pagination.Start, pagination.Size)
 		if err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"msg":  "Query failed.",
-				"data": err.Error(),
-			})
+			c.JSON(fail("Query failed.", err.Error()))
 			return
 		}
 		defer rows.Close()
-		row := db.QueryRow("SELECT COUNT(*) FROM info;")
+		row := db.QueryRow("SELECT COUNT(*) FROM daka_info;")
 		total := 0
 		row.Scan(&total)
 
