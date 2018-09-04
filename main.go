@@ -148,10 +148,10 @@ func loginHandler() gin.HandlerFunc {
 			return
 		}
 		if !matchPassword(lr.Username, lr.Password) {
-			c.JSON(fail("user name or password is incorrect", err.Error()))
+			c.JSON(fail("user name or password is incorrect", nil))
 			return
 		}
-		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", "", true, true)
+		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", "", false, false)
 		c.JSON(ok("login success", ""))
 	}
 }

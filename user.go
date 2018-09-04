@@ -41,9 +41,9 @@ func register(username, password string) error {
 	return nil
 }
 
-func findDakaUser(userId string) (d *dakaUser, err error) {
+func findDakaUser(userId string) (d dakaUser, err error) {
 	row := db.QueryRow("SELECT USER_ID, USERNAME FROM daka_user where user_id = ?", userId)
-	err = row.Scan(d)
+	err = row.Scan(&d.UserId, &d.UserName)
 	return
 }
 
@@ -66,6 +66,12 @@ func matchPassword(username, password string) bool {
 }
 
 func UserMiddleware() gin.HandlerFunc {
+	needLoginFail := func() (statusCode int, r result) {
+		statusCode = 419
+		r.Msg = "login needed"
+		r.Code = "419"
+		return
+	}
 	return func(c *gin.Context) {
 		if c.Request.RequestURI == "/api/register" {
 			return
@@ -75,13 +81,13 @@ func UserMiddleware() gin.HandlerFunc {
 		}
 		c2, err := c.Cookie(cookieUserId)
 		if err != nil && err == http.ErrNoCookie {
-			c.AbortWithStatusJSON(419, "login needed")
+			c.AbortWithStatusJSON(needLoginFail())
 			return
 		}
 		cookie := dakaCookie{c2}
 		_, err = findDakaUser(cookie.getUserId())
 		if err != nil {
-			c.AbortWithStatusJSON(419, "login needed")
+			c.AbortWithStatusJSON(needLoginFail())
 			return
 		}
 	}
