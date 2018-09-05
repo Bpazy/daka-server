@@ -43,8 +43,7 @@ func register(username, password string) error {
 
 func findDakaUser(userId string) (d dakaUser, err error) {
 	row := db.QueryRow("SELECT USER_ID, USERNAME FROM daka_user where user_id = ?", userId)
-	err = row.Scan(&d.UserId, &d.UserName)
-	return
+	return d, row.Scan(&d.UserId, &d.UserName)
 }
 
 func findDakaUserByUserName(username string) (*dakaUser, error) {

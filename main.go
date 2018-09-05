@@ -1,18 +1,18 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
+	"github.com/jmoiron/sqlx"
 	"log"
 	"net/http"
 	"strings"
 )
 
-var db *sql.DB
+var db *sqlx.DB
 var port *string
 
 const (
@@ -29,7 +29,7 @@ func init() {
 	port = flag.String("port", ":8080", "serve port")
 	flag.Parse()
 
-	db2, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", *sqlUserName, *sqlPassword, *sqlUrl, *sqlDatabase))
+	db2, err := sqlx.Connect("mysql", fmt.Sprintf("%s:%s@tcp(%s)/%s", *sqlUserName, *sqlPassword, *sqlUrl, *sqlDatabase))
 	if err != nil {
 		log.Fatal("connect database error", err)
 	}
@@ -115,13 +115,11 @@ func registerHandler() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		rr := RegisterRequest{}
-		err := c.BindJSON(&rr)
-		if err != nil {
+		if err := c.BindJSON(&rr); err != nil {
 			c.JSON(fail("Json deserialize failed", err.Error()))
 			return
 		}
-		err = register(rr.Username, rr.Password)
-		if err != nil {
+		if err := register(rr.Username, rr.Password); err != nil {
 			c.JSON(fail(err.Error(), ""))
 			return
 		}
@@ -136,8 +134,7 @@ func loginHandler() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		lr := LoginRequest{}
-		err := c.BindJSON(&lr)
-		if err != nil {
+		if err := c.BindJSON(&lr); err != nil {
 			c.JSON(fail("Json deserialize failed", err.Error()))
 			return
 		}
@@ -157,7 +154,7 @@ func loginHandler() gin.HandlerFunc {
 }
 
 type Data struct {
-	InfoId   string `json:"info_id"`
+	InfoId   string `json:"info_id" db:"info_id"`
 	Name     string `json:"name"`
 	Distance int    `json:"distance"`
 	Date     Date   `json:"date"`
@@ -170,16 +167,16 @@ func saveHandler() gin.HandlerFunc {
 			c.JSON(fail("Json deserialize failed.", err.Error()))
 			return
 		}
-		stmt, err := db.Prepare("INSERT INTO daka_info(INFO_ID, NAME, DISTANCE, DATE) values(?,?,?,?)")
+		data.InfoId = uuid.Must(uuid.NewV4()).String()
+		nstmt, err := db.PrepareNamed("INSERT INTO daka_info(INFO_ID, NAME, DISTANCE, DATE) values(:info_id,:name,:distance,:date)")
 		if err != nil {
 			panic(err)
 		}
-		defer stmt.Close()
+		defer nstmt.Close()
 
-		_, err = stmt.Exec(uuid.Must(uuid.NewV4()), data.Name, data.Distance, &data.Date)
+		_, err = nstmt.Exec(&data)
 		if err != nil {
-			c.JSON(fail("Insert data failed.", err.Error()))
-			return
+			panic(err)
 		}
 		c.JSON(http.StatusOK, data)
 	}
@@ -198,27 +195,25 @@ type PaginationResponse struct {
 func listHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pagination := PaginationRequest{}
-		err := c.BindJSON(&pagination)
-		if err != nil {
+		if err := c.BindJSON(&pagination); err != nil {
 			c.JSON(fail("Json deserialize failed.", ""))
 			return
 		}
-		rows, err := db.Query("SELECT INFO_ID, NAME, DISTANCE, DATE FROM daka_info ORDER BY CREATE_TIME DESC LIMIT ? , ?", pagination.Start, pagination.Size)
+
+		total := 0
+		db.Get(&total, "SELECT COUNT(*) FROM daka_info;")
+
+		rows, err := db.NamedQuery("SELECT info_id, name, distance, date FROM daka_info ORDER BY create_time DESC LIMIT :start,:size", &pagination)
 		if err != nil {
-			c.JSON(fail("Query failed.", err.Error()))
-			return
+			panic(err)
 		}
 		defer rows.Close()
-		row := db.QueryRow("SELECT COUNT(*) FROM daka_info;")
-		total := 0
-		row.Scan(&total)
 
 		dataList := make([]Data, 0)
-		for rows.Next() {
-			var data = Data{}
-			rows.Scan(&data.InfoId, &data.Name, &data.Distance, &data.Date)
-			dataList = append(dataList, data)
+		if err = sqlx.StructScan(rows, &dataList); err != nil {
+			panic(err)
 		}
+
 		c.JSON(http.StatusOK, PaginationResponse{Total: total, Data: dataList})
 	}
 }

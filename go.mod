@@ -7,6 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.4.0
 	github.com/gofrs/uuid v3.1.0+incompatible
 	github.com/golang/protobuf v1.2.0 // indirect
+	github.com/jmoiron/sqlx v0.0.0-20180614180643-0dae4fefe7c0
 	github.com/json-iterator/go v1.1.5 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
