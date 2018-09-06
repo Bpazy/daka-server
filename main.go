@@ -74,7 +74,7 @@ func init() {
 
 func main() {
 	r := gin.Default()
-	r.Use(UserMiddleware())
+	r.Use(userMiddleware())
 
 	api := r.Group("/api")
 	{

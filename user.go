@@ -64,7 +64,7 @@ func matchPassword(username, password string) bool {
 	return i != 0
 }
 
-func UserMiddleware() gin.HandlerFunc {
+func userMiddleware() gin.HandlerFunc {
 	needLoginFail := func() (statusCode int, r result) {
 		statusCode = 419
 		r.Msg = "login needed"
