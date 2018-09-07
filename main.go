@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/Bpazy/daka-server/errors"
+	"github.com/Bpazy/daka-server/util"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gofrs/uuid"
@@ -17,8 +19,6 @@ var port *string
 
 const (
 	cookieUserId = "cookieUserId"
-	OK           = "OK"
-	FAILED       = "FAILED"
 )
 
 func init() {
@@ -73,8 +73,8 @@ func init() {
 }
 
 func main() {
-	r := gin.Default()
-	r.Use(userMiddleware())
+	r := gin.New()
+	r.Use(gin.Logger(), gin.Recovery(), userMiddleware(), errors.JsonError())
 
 	api := r.Group("/api")
 	{
@@ -86,28 +86,6 @@ func main() {
 	r.Run(*port)
 }
 
-type result struct {
-	Code string      `json:"code"`
-	Msg  string      `json:"msg"`
-	Data interface{} `json:"data"`
-}
-
-func ok(msg string, data interface{}) (httpStatus int, r result) {
-	httpStatus = http.StatusOK
-	r.Msg = msg
-	r.Data = data
-	r.Code = OK
-	return
-}
-
-func fail(msg string, data interface{}) (httpStatus int, r result) {
-	httpStatus = http.StatusOK
-	r.Msg = msg
-	r.Data = data
-	r.Code = FAILED
-	return
-}
-
 func registerHandler() gin.HandlerFunc {
 	type RegisterRequest struct {
 		Username string `json:"username"`
@@ -115,15 +93,15 @@ func registerHandler() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		rr := RegisterRequest{}
-		if err := c.BindJSON(&rr); err != nil {
-			c.JSON(fail("Json deserialize failed", err.Error()))
+		if ok := bindJson(c, &rr); !ok {
 			return
 		}
+
 		if err := register(rr.Username, rr.Password); err != nil {
-			c.JSON(fail(err.Error(), ""))
+			c.JSON(util.Fail(err.Error(), ""))
 			return
 		}
-		c.JSON(ok("register success", ""))
+		c.JSON(util.Fail("register success", ""))
 	}
 }
 
@@ -134,22 +112,21 @@ func loginHandler() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		lr := LoginRequest{}
-		if err := c.BindJSON(&lr); err != nil {
-			c.JSON(fail("Json deserialize failed", err.Error()))
+		if ok := bindJson(c, &lr); !ok {
 			return
 		}
 
 		user, err := findDakaUserByUserName(lr.Username)
 		if err != nil {
-			c.JSON(fail("user name or password is incorrect", err.Error()))
+			c.JSON(util.Fail("user name or password is incorrect", err.Error()))
 			return
 		}
 		if !matchPassword(lr.Username, lr.Password) {
-			c.JSON(fail("user name or password is incorrect", nil))
+			c.JSON(util.Fail("user name or password is incorrect", nil))
 			return
 		}
 		c.SetCookie(cookieUserId, user.UserId, 60*60*8, "/", "", false, false)
-		c.JSON(ok("login success", ""))
+		c.JSON(util.Ok("login success", ""))
 	}
 }
 
@@ -160,11 +137,18 @@ type Data struct {
 	Date     Date   `json:"date"`
 }
 
+func bindJson(c *gin.Context, target interface{}) bool {
+	if err := c.ShouldBindJSON(target); err != nil {
+		c.Error(errors.New("json deserialize failed"))
+		return false
+	}
+	return true
+}
+
 func saveHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var data = Data{}
-		if err := c.BindJSON(&data); err != nil {
-			c.JSON(fail("Json deserialize failed.", err.Error()))
+		if ok := bindJson(c, &data); !ok {
 			return
 		}
 		data.InfoId = uuid.Must(uuid.NewV4()).String()
@@ -195,8 +179,7 @@ type PaginationResponse struct {
 func listHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		pagination := PaginationRequest{}
-		if err := c.BindJSON(&pagination); err != nil {
-			c.JSON(fail("Json deserialize failed.", ""))
+		if ok := bindJson(c, &pagination); !ok {
 			return
 		}
 
